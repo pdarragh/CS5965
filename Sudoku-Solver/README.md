@@ -1,5 +1,6 @@
 # Sudoku Solver
 
+|----------|---------|
 | Language | Haskell |
 | Start | 2016-01-11 |
 
