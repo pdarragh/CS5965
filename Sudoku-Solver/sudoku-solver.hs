@@ -13,13 +13,22 @@ TODO:
 import Control.Monad
 import Data.List
 import Data.List.Split
+import Data.Maybe
 import System.Directory
 import System.Environment
 import System.Exit
 import System.IO
 
-type Board = [[Int]]
-type Row = [Int]
+type Value = Int
+
+type Board = [Maybe Value]
+type SolvedBoard = [Value]
+
+{---------------
+
+    PRINT
+
+---------------}
 
 -- print_error
 --
@@ -29,17 +38,23 @@ print_error message = do
     putStrLn ("Error: " ++ message)
     exitFailure
 
--- print_row
+-- row_to_string
 --
 -- Takes a row and prints it out nicely. Replaces 0 with '_'.
-print_row :: Row -> String
-print_row row = intercalate " " $ map show row
+row_to_string :: Row -> String
+row_to_string row = intercalate " " $ map show row
 
 -- print_board
 --
 -- Takes a board and prints it out nicely. Replaces 0 with '_'.
 print_board :: Board -> IO ()
-print_board board = putStrLn $ intercalate "\n" $ map print_row board
+print_board board = putStrLn $ intercalate "\n" $ map row_to_string board
+
+{---------------
+
+    MAIN
+
+---------------}
 
 main :: IO ()
 main = do
@@ -56,6 +71,12 @@ main = do
             contents <- readFile filename
             print_board $ build_board_from_lines $ filter (not . null) $ splitOn "\n" contents
         else error "Invalid filename."
+
+{---------------
+
+    READ
+
+---------------}
 
 -- replace_underscore_char
 --
@@ -116,6 +137,12 @@ extract (a, b, c) l = [(l !! a), (l !! b), (l !! c)]
 get_square_from_lines s lines = do
     let values = ( s, s+1, s+2 )
     map (extract values) lines
+
+{---------------
+
+    VERIFY
+
+---------------}
 
 -- is_valid_sudoku_board
 --
