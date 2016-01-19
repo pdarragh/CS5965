@@ -79,6 +79,11 @@ main = do
             let n = dimensions !! 1
             let board = build_board_from_lines $ tail $ filtered_contents
             print_board board (m * n)
+            if board_is_correct board m n then do
+                putStrLn ""
+                putStrLn "Board is correct!"
+            else do
+                putStrLn "Invalid board."
         else error "Invalid filename."
 
 {---------------
@@ -103,6 +108,16 @@ build_board_from_lines lines = map read_int $ words $ intercalate " " lines
 
 ---------------}
 
+value_from_maybe :: Maybe Value -> Value
+value_from_maybe Nothing = 0
+value_from_maybe n = fromJust n
+
+{---------------
+
+    MAINPULATE ROWS
+
+---------------}
+
 -- row_for_index
 --
 -- Pulls out a complete horizontal row from a board for a given index.
@@ -115,6 +130,12 @@ row_for_index board index size = take size $ drop (index - (mod index size)) boa
 rows_from_board :: Board -> Int -> [[Maybe Value]]
 rows_from_board board dimension = map row_for_index' [x * dimension | x <- [0..(dimension - 1)]]
     where row_for_index' i = row_for_index board i dimension
+
+{---------------
+
+    MAINPULATE COLUMNS
+
+---------------}
 
 -- col_for_index
 --
@@ -129,21 +150,67 @@ cols_from_board :: Board -> Int -> [[Maybe Value]]
 cols_from_board board dimension = map col_for_index' [0..(dimension - 1)]
     where col_for_index' i = col_for_index board i dimension
 
+{---------------
+
+    MAINPULATE GROUPS
+
+---------------}
+
+-- first_indices_for_groups_in_col
+--
+-- Gives a list of the indices of the top-left elements of each group in a
+-- column.
+first_indices_for_groups_in_col :: Board -> Int -> Int -> Int -> [Int]
+first_indices_for_groups_in_col board m n col = take m $ [i * n + (col * m) | i <- [0, 0 + (m * n) ..]]
+
+
+-- first_indices_for_groups
+--
+-- Returns a list of all the first indices for all groups on a board.
+first_indices_for_groups :: Board -> Int -> Int -> [Int]
+first_indices_for_groups board m n = concat $ map (first_indices_for_groups_in_col board m n) $ [0..(n - 1)]
+
 -- group_row_for_index
 --
 -- Pulls out a group's horizontal row from a board for a given index.
 group_row_for_index :: Board -> Int -> Int -> [Maybe Value]
-group_row_for_index board index m = take m $ drop (index - (mod index m)) board
+group_row_for_index board m index = take m $ drop (index - (mod index m)) board
 
 -- group_for_index
 --
 -- Gives an entire group as a list for a given index.
 group_for_index :: Board -> Int -> Int -> Int -> [Maybe Value]
-group_for_index board index m n = concat $ map group_rows' $ take n [index, index + (m * n) ..]
-    where group_rows' i = group_row_for_index board i m
+group_for_index board m n index = concat $ map (group_row_for_index board m) $ take n [index, index + (m * n) ..]
+
+-- groups_from_board
+--
+-- Returns a list of all the groups on a board. Groups are (n x m) in size.
+groups_from_board :: Board -> Int -> Int -> [[Maybe Value]]
+groups_from_board board m n = map (group_for_index board m n) $ first_indices_for_groups board m n
 
 {---------------
 
     VERIFY
 
 ---------------}
+
+-- board_is_correct
+--
+-- Affirms whether an entire board solution is correct.
+board_is_correct :: Board -> Int -> Int -> Bool
+board_is_correct board m n = and [
+        all id $ map group_is_correct $ rows_from_board board (m * n) ,
+        all id $ map group_is_correct $ cols_from_board board (m * n) ,
+        all id $ map group_is_correct $ groups_from_board board m n
+    ]
+
+-- group_is_correct
+--
+-- Tests whether a list of values is correct.
+group_is_correct :: [Maybe Value] -> Bool
+group_is_correct group = and [
+        all id $ map (`elem` values) [1..(length values)] ,
+        sum values == sum [1..(length values)] ,
+        (length values) == (length $ nub values)
+    ]
+    where values = map value_from_maybe group
