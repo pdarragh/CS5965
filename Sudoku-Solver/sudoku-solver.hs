@@ -38,17 +38,21 @@ print_error message = do
     putStrLn ("Error: " ++ message)
     exitFailure
 
--- row_to_string
+-- print_value
 --
--- Takes a row and prints it out nicely. Replaces 0 with '_'.
-row_to_string :: Row -> String
-row_to_string row = intercalate " " $ map show row
+-- Prints out a Value, giving a "_" for a Nothing.
+print_value :: Maybe Value -> String
+print_value Nothing = "_"
+print_value n = show $ fromJust n
+
+print_row :: [Maybe Value] -> String
+print_row row = intercalate " " $ map print_value row
 
 -- print_board
 --
--- Takes a board and prints it out nicely. Replaces 0 with '_'.
-print_board :: Board -> IO ()
-print_board board = putStrLn $ intercalate "\n" $ map row_to_string board
+-- Takes a board and prints it out nicely.
+print_board :: Board -> Int -> IO ()
+print_board board dimension = putStrLn $ intercalate "\n" $ map print_row $ rows_from_board board dimension
 
 {---------------
 
@@ -69,7 +73,12 @@ main = do
         if file_exists then do
             -- It does exist! Let's load it.
             contents <- readFile filename
-            print_board $ build_board_from_lines $ filter (not . null) $ splitOn "\n" contents
+            let filtered_contents = filter (not . null) $ splitOn "\n" contents
+            let dimensions = map (read :: String -> Int) $ words $ head $ filtered_contents
+            let m = dimensions !! 0
+            let n = dimensions !! 1
+            let board = build_board_from_lines $ tail $ filtered_contents
+            print_board board (m * n)
         else error "Invalid filename."
 
 {---------------
@@ -78,77 +87,63 @@ main = do
 
 ---------------}
 
--- replace_underscore_char
---
--- Returns a character given, unless that character is an underscore.
-replace_underscore_char :: Char -> Char
-replace_underscore_char '_' = '0'
-replace_underscore_char c = c
-
--- replace_underscore
---
--- Replaces all instances of '_' within a string with '0' for sudoku formatting.
-replace_underscore :: String -> String
-replace_underscore string = map replace_underscore_char string
-
--- replace_zero_char
---
--- Returns a character given, unless that character is a zero.
-replace_zero_char :: Char -> Char
-replace_zero_char '0' = '_'
-replace_zero_char c = c
-
--- replace_zero
---
--- Replaces all instances of '0' within a string with '_' for output formatting.
-replace_zero :: String -> String
-replace_zero string = map replace_zero_char string
-
--- read_numbers_from_line
---
--- Given a space-separated line of Sudoku numbers, returns a list of integers.
--- '_' will be converted to 0 in the list.
--- Example:
---   read_sudoku_line "1 2 3 4 5 6 7 8 9"
---     -> [1, 2, 3, 4, 5, 6, 7, 8, 9]
-read_numbers_from_line :: String -> Row
-read_numbers_from_line line = map (read :: String -> Int) (words $ replace_underscore line)
+read_int :: String -> Maybe Value
+read_int "_" = Nothing
+read_int s = Just $ (read :: String -> Int) s
 
 -- build_board_from_lines
 --
 -- Given a list of strings, produces a list of lists of integers.
 build_board_from_lines :: [String] -> Board
-build_board_from_lines lines = map read_numbers_from_line lines
+build_board_from_lines lines = map read_int $ words $ intercalate " " lines
 
--- is_valid_sudoku_line
+{---------------
+
+    MAINPULATE
+
+---------------}
+
+-- row_for_index
 --
--- Ensures that a given line has the appropriate number of values and that they
--- all sum to the appropriate value (45).
-is_valid_sudoku_line :: Row -> Bool
-is_valid_sudoku_line numbers =
-    length numbers == (length (nub numbers)) &&
-    length numbers == 9 &&
-    all (>= 0) numbers &&
-    sum numbers == 45
+-- Pulls out a complete horizontal row from a board for a given index.
+row_for_index :: Board -> Int -> Int -> [Maybe Value]
+row_for_index board index size = take size $ drop (index - (mod index size)) board
 
-extract :: (Int, Int, Int) -> [Int] -> [Int]
-extract (a, b, c) l = [(l !! a), (l !! b), (l !! c)]
+-- rows_from_board
+--
+-- Returns a list of all rows in the board.
+rows_from_board :: Board -> Int -> [[Maybe Value]]
+rows_from_board board dimension = map row_for_index' [x * dimension | x <- [0..(dimension - 1)]]
+    where row_for_index' i = row_for_index board i dimension
 
-get_square_from_lines s lines = do
-    let values = ( s, s+1, s+2 )
-    map (extract values) lines
+-- col_for_index
+--
+-- Pulls out a complete vertical column from a board for a given index.
+col_for_index :: Board -> Int -> Int -> [Maybe Value]
+col_for_index board index size = map (board !!) [index, (index + size) .. ((size * size) - 1)]
+
+-- cols_from_board
+--
+-- Returns a list of all columns in the board.
+cols_from_board :: Board -> Int -> [[Maybe Value]]
+cols_from_board board dimension = map col_for_index' [0..(dimension - 1)]
+    where col_for_index' i = col_for_index board i dimension
+
+-- group_row_for_index
+--
+-- Pulls out a group's horizontal row from a board for a given index.
+group_row_for_index :: Board -> Int -> Int -> [Maybe Value]
+group_row_for_index board index m = take m $ drop (index - (mod index m)) board
+
+-- group_for_index
+--
+-- Gives an entire group as a list for a given index.
+group_for_index :: Board -> Int -> Int -> Int -> [Maybe Value]
+group_for_index board index m n = concat $ map group_rows' $ take n [index, index + (m * n) ..]
+    where group_rows' i = group_row_for_index board i m
 
 {---------------
 
     VERIFY
 
 ---------------}
-
--- is_valid_sudoku_board
---
--- Verifies that a board is valid.
-is_valid_sudoku_board :: Board -> Bool
-is_valid_sudoku_board board = do
-    let loosely_valid = all is_valid_sudoku_line board
-    let triples = [ (x, x+1, x+2) | x <- [0, 3, 6] ]
-    True
