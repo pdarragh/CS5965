@@ -30,35 +30,41 @@ type SolvedBoard = [Value]
 
 ---------------}
 
+show_usage_message :: IO ()
 show_usage_message = putStrLn "Usage information."
 
+verify :: [String] -> IO ()
 verify args = do
     if (length args) /= 1 then do
         print_error "Accepts one argument: the name of the file to read."
     else do
         -- Now do the file reading.
         let filename = args !! 0
-        file_exists <- doesFileExist filename
-        if file_exists then do
-            -- It does exist! Let's load it.
-            contents <- readFile filename
-            let filtered_contents = filter (not . null) $ splitOn "\n" contents
-            let dimensions = map (read :: String -> Int) $ words $ head $ filtered_contents
-            let m = dimensions !! 0
-            let n = dimensions !! 1
-            let board = build_board_from_lines $ tail $ filtered_contents
-            print_board board (m * n)
-            if board_is_correct board m n then do
-                putStrLn ""
-                putStrLn "Board is correct!"
-            else do
-                putStrLn "Invalid board."
-        else error "Invalid filename."
+        (board, m, n) <- board_from_file filename
+        print_board board (m * n)
+        if board_is_correct board m n then do
+            putStrLn ""
+            putStrLn "Board is correct!"
+        else do
+            putStrLn ""
+            putStrLn "Invalid board."
 
--- separate file reading to its own function
+board_from_file :: String -> IO (Board, Int, Int)
+board_from_file filename = do
+    file_exists <- doesFileExist filename
+    if file_exists then do
+        contents <- readFile filename
+        let filtered_contents = filter (not . null) $ splitOn "\n" contents
+        let dimensions = map (read :: String -> Int) $ words $ head $ filtered_contents
+        let m = dimensions !! 0
+        let n = dimensions !! 1
+        let board = build_board_from_lines $ tail $ filtered_contents
+        return (board, m, n)
+    else error "Invalid filename."
 
 dispatch :: [(String, [String] -> IO ())]
-dispatch = [
+dispatch
+    = [
         ("verify", verify)
     ]
 
