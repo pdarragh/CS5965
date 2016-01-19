@@ -34,20 +34,24 @@ show_usage_message :: IO ()
 show_usage_message = putStrLn "Usage information."
 
 verify :: [String] -> IO ()
-verify args = do
-    if (length args) /= 1 then do
-        print_error "Accepts one argument: the name of the file to read."
+verify [] = print_error "Accepts one argument: the name of the file to read."
+verify [filename] = do
+    (board, m, n) <- board_from_file filename
+    print_board board (m * n)
+    if board_is_correct board m n then do
+        putStrLn ""
+        putStrLn "Board is correct!"
     else do
-        -- Now do the file reading.
-        let filename = args !! 0
-        (board, m, n) <- board_from_file filename
-        print_board board (m * n)
-        if board_is_correct board m n then do
-            putStrLn ""
-            putStrLn "Board is correct!"
-        else do
-            putStrLn ""
-            putStrLn "Invalid board."
+        putStrLn ""
+        putStrLn "Invalid board."
+verify x = verify []
+
+solve :: [String] -> IO ()
+solve [] = print_error "Accepts one argument: the name of the file to read."
+solve [filename] = do
+    (board, m, n) <- board_from_file filename
+    putStrLn "test"
+solve x = solve []
 
 board_from_file :: String -> IO (Board, Int, Int)
 board_from_file filename = do
