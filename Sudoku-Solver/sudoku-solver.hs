@@ -26,6 +26,54 @@ type SolvedBoard = [Value]
 
 {---------------
 
+    MAIN
+
+---------------}
+
+show_usage_message = putStrLn "Usage information."
+
+verify args = do
+    if (length args) /= 1 then do
+        print_error "Accepts one argument: the name of the file to read."
+    else do
+        -- Now do the file reading.
+        let filename = args !! 0
+        file_exists <- doesFileExist filename
+        if file_exists then do
+            -- It does exist! Let's load it.
+            contents <- readFile filename
+            let filtered_contents = filter (not . null) $ splitOn "\n" contents
+            let dimensions = map (read :: String -> Int) $ words $ head $ filtered_contents
+            let m = dimensions !! 0
+            let n = dimensions !! 1
+            let board = build_board_from_lines $ tail $ filtered_contents
+            print_board board (m * n)
+            if board_is_correct board m n then do
+                putStrLn ""
+                putStrLn "Board is correct!"
+            else do
+                putStrLn "Invalid board."
+        else error "Invalid filename."
+
+-- separate file reading to its own function
+
+dispatch :: [(String, [String] -> IO ())]
+dispatch = [
+        ("verify", verify)
+    ]
+
+run :: [String] -> IO ()
+run [] = show_usage_message
+run (command : args)
+    = case lookup command dispatch of
+        Just act -> act args
+        Nothing  -> show_usage_message
+
+main :: IO ()
+main = run =<< getArgs
+
+{---------------
+
     PRINT
 
 ---------------}
@@ -53,38 +101,6 @@ print_row row = intercalate " " $ map print_value row
 -- Takes a board and prints it out nicely.
 print_board :: Board -> Int -> IO ()
 print_board board dimension = putStrLn $ intercalate "\n" $ map print_row $ rows_from_board board dimension
-
-{---------------
-
-    MAIN
-
----------------}
-
-main :: IO ()
-main = do
-    args <- getArgs
-    let filename = args !! 0
-    if (length args) /= 1 then do
-        print_error "Accepts one argument: the name of the file to read."
-    else do
-        -- Now do the file reading.
-        --let board = read_file filename
-        file_exists <- doesFileExist filename
-        if file_exists then do
-            -- It does exist! Let's load it.
-            contents <- readFile filename
-            let filtered_contents = filter (not . null) $ splitOn "\n" contents
-            let dimensions = map (read :: String -> Int) $ words $ head $ filtered_contents
-            let m = dimensions !! 0
-            let n = dimensions !! 1
-            let board = build_board_from_lines $ tail $ filtered_contents
-            print_board board (m * n)
-            if board_is_correct board m n then do
-                putStrLn ""
-                putStrLn "Board is correct!"
-            else do
-                putStrLn "Invalid board."
-        else error "Invalid filename."
 
 {---------------
 
@@ -160,15 +176,15 @@ cols_from_board board dimension = map col_for_index' [0..(dimension - 1)]
 --
 -- Gives a list of the indices of the top-left elements of each group in a
 -- column.
-first_indices_for_groups_in_col :: Board -> Int -> Int -> Int -> [Int]
-first_indices_for_groups_in_col board m n col = take m $ [i * n + (col * m) | i <- [0, 0 + (m * n) ..]]
+first_indices_for_groups_in_col :: Int -> Int -> Int -> [Int]
+first_indices_for_groups_in_col m n col = take m $ [i * n + (col * m) | i <- [0, 0 + (m * n) ..]]
 
 
 -- first_indices_for_groups
 --
 -- Returns a list of all the first indices for all groups on a board.
-first_indices_for_groups :: Board -> Int -> Int -> [Int]
-first_indices_for_groups board m n = concat $ map (first_indices_for_groups_in_col board m n) $ [0..(n - 1)]
+first_indices_for_groups :: Int -> Int -> [Int]
+first_indices_for_groups m n = sort $ concat $ map (first_indices_for_groups_in_col m n) $ [0..(n - 1)]
 
 -- group_row_for_index
 --
@@ -176,17 +192,37 @@ first_indices_for_groups board m n = concat $ map (first_indices_for_groups_in_c
 group_row_for_index :: Board -> Int -> Int -> [Maybe Value]
 group_row_for_index board m index = take m $ drop (index - (mod index m)) board
 
--- group_for_index
+-- group_for_first_index
 --
 -- Gives an entire group as a list for a given index.
+group_for_first_index :: Board -> Int -> Int -> Int -> [Maybe Value]
+group_for_first_index board m n index = concat $ map (group_row_for_index board m) $ take n [index, index + (m * n) ..]
+
+-- group_indices_for_first_index
+--
+-- Given a first index for a group (i.e. the top-left index within the group),
+-- returns a list of all of the other inices in the group.
+group_indices_for_first_index :: Int -> Int -> Int -> [Int]
+group_indices_for_first_index m n index = concat $ map (take m) [[x, x+1 ..] | x <- take n [index, index + (m * n) ..]]
+
+-- group_indices_for_index
+--
+-- Like `group_indices_for_first_index`, but works for any index within the
+-- scope of the board.
+group_indices_for_index :: Int -> Int -> Int -> [Int]
+group_indices_for_index m n index = (!! 0) $ filter (elem index) $ map (group_indices_for_first_index m n) (first_indices_for_groups m n)
+
+-- group_for_index
+--
+-- Returns a list of all the values within a group given a specific index.
 group_for_index :: Board -> Int -> Int -> Int -> [Maybe Value]
-group_for_index board m n index = concat $ map (group_row_for_index board m) $ take n [index, index + (m * n) ..]
+group_for_index board m n index = map (board !!) $ group_indices_for_index m n index
 
 -- groups_from_board
 --
 -- Returns a list of all the groups on a board. Groups are (n x m) in size.
 groups_from_board :: Board -> Int -> Int -> [[Maybe Value]]
-groups_from_board board m n = map (group_for_index board m n) $ first_indices_for_groups board m n
+groups_from_board board m n = map (group_for_first_index board m n) $ first_indices_for_groups m n
 
 {---------------
 
