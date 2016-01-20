@@ -36,7 +36,7 @@ show_usage_message = putStrLn "Usage information."
 verify :: [String] -> IO ()
 verify [filename] = do
     (board, m, n) <- board_from_file filename
-    print_board board (m * n)
+    print_board board m n
     if board_is_correct board m n then do
         putStrLn ""
         putStrLn "Board is correct!"
@@ -49,6 +49,7 @@ verify _ = verify []
 solve :: [String] -> IO ()
 solve [filename] = do
     (board, m, n) <- board_from_file filename
+    let indexed_board = zip [0..] board
     putStrLn "Solving"
 solve [] = print_error "Accepts one argument: the name of the file to read."
 solve _ = solve []
@@ -110,8 +111,8 @@ print_row row = intercalate " " $ map print_value row
 -- print_board
 --
 -- Takes a board and prints it out nicely.
-print_board :: Board -> Int -> IO ()
-print_board board dimension = putStrLn $ intercalate "\n" $ map print_row $ rows_from_board board dimension
+print_board :: Board -> Int -> Int -> IO ()
+print_board board m n = putStrLn $ intercalate "\n" $ map print_row $ rows_from_board board m n
 
 {---------------
 
@@ -148,15 +149,16 @@ value_from_maybe n = fromJust n
 -- row_for_index
 --
 -- Pulls out a complete horizontal row from a board for a given index.
-row_for_index :: Board -> Int -> Int -> [Maybe Value]
-row_for_index board index size = take size $ drop (index - (mod index size)) board
+row_for_index :: Board -> Int -> Int -> Int -> [Maybe Value]
+row_for_index board m n index = take dimension $ drop (index - (mod index dimension)) board
+    where dimension = m * n
 
 -- rows_from_board
 --
 -- Returns a list of all rows in the board.
-rows_from_board :: Board -> Int -> [[Maybe Value]]
-rows_from_board board dimension = map row_for_index' [x * dimension | x <- [0..(dimension - 1)]]
-    where row_for_index' i = row_for_index board i dimension
+rows_from_board :: Board -> Int -> Int -> [[Maybe Value]]
+rows_from_board board m n = map (row_for_index board m n) [x * dimension | x <- [0..(dimension - 1)]]
+    where dimension = m * n
 
 {---------------
 
@@ -167,15 +169,15 @@ rows_from_board board dimension = map row_for_index' [x * dimension | x <- [0..(
 -- col_for_index
 --
 -- Pulls out a complete vertical column from a board for a given index.
-col_for_index :: Board -> Int -> Int -> [Maybe Value]
-col_for_index board index size = map (board !!) [index, (index + size) .. ((size * size) - 1)]
+col_for_index :: Board -> Int -> Int -> Int -> [Maybe Value]
+col_for_index board m n index = map (board !!) [index, (index + dimension) .. ((dimension * dimension) - 1)]
+    where dimension = m * n
 
 -- cols_from_board
 --
 -- Returns a list of all columns in the board.
-cols_from_board :: Board -> Int -> [[Maybe Value]]
-cols_from_board board dimension = map col_for_index' [0..(dimension - 1)]
-    where col_for_index' i = col_for_index board i dimension
+cols_from_board :: Board -> Int -> Int -> [[Maybe Value]]
+cols_from_board board m n = map (col_for_index board m n) [0..(m * n - 1)]
 
 {---------------
 
@@ -246,8 +248,8 @@ groups_from_board board m n = map (group_for_first_index board m n) $ first_indi
 -- Affirms whether an entire board solution is correct.
 board_is_correct :: Board -> Int -> Int -> Bool
 board_is_correct board m n = and [
-        all id $ map group_is_correct $ rows_from_board board (m * n) ,
-        all id $ map group_is_correct $ cols_from_board board (m * n) ,
+        all id $ map group_is_correct $ rows_from_board board m n ,
+        all id $ map group_is_correct $ cols_from_board board m n ,
         all id $ map group_is_correct $ groups_from_board board m n
     ]
 
@@ -261,3 +263,38 @@ group_is_correct group = and [
         (length values) == (length $ nub values)
     ]
     where values = map value_from_maybe group
+
+{---------------
+
+    SOLVE
+
+---------------}
+
+possibilities_for_index :: Board -> Int -> Int -> Int -> [Value]
+possibilities_for_index board m n index
+    = case (board !! index) of
+        Nothing -> filtered_possibilities_for_index board m n index
+        Just value -> [value]
+
+-- filtered_possibilities_for_index
+--
+-- Finds all possible legal values for a given index.
+filtered_possibilities_for_index :: Board -> Int -> Int -> Int -> [Value]
+filtered_possibilities_for_index board m n index = possibilities
+    where
+        possibilities = filter_possibilities col_pos row
+        col_pos       = filter_possibilities group_pos col
+        group_pos     = filter_possibilities [1..(m * n)] group
+        row           = row_for_index board m n index
+        col           = col_for_index board m n index
+        group         = group_for_index board m n index
+
+-- possibilities: list of possible remaining integer answers
+-- values: list of possible values from the board
+filter_possibilities :: [Int] -> [Maybe Value] -> [Value]
+filter_possibilities [] _ = []
+filter_possibilities possibilities [] = possibilities
+filter_possibilities possibilities values
+    = case head values of
+        Nothing -> filter_possibilities possibilities (tail values)
+        Just value -> filter_possibilities (delete value possibilities) (tail values)
