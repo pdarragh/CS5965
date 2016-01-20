@@ -34,7 +34,6 @@ show_usage_message :: IO ()
 show_usage_message = putStrLn "Usage information."
 
 verify :: [String] -> IO ()
-verify [] = print_error "Accepts one argument: the name of the file to read."
 verify [filename] = do
     (board, m, n) <- board_from_file filename
     print_board board (m * n)
@@ -44,14 +43,15 @@ verify [filename] = do
     else do
         putStrLn ""
         putStrLn "Invalid board."
-verify x = verify []
+verify [] = print_error "Accepts one argument: the name of the file to read."
+verify _ = verify []
 
 solve :: [String] -> IO ()
-solve [] = print_error "Accepts one argument: the name of the file to read."
 solve [filename] = do
     (board, m, n) <- board_from_file filename
-    putStrLn "test"
-solve x = solve []
+    putStrLn "Solving"
+solve [] = print_error "Accepts one argument: the name of the file to read."
+solve _ = solve []
 
 board_from_file :: String -> IO (Board, Int, Int)
 board_from_file filename = do
@@ -69,7 +69,8 @@ board_from_file filename = do
 dispatch :: [(String, [String] -> IO ())]
 dispatch
     = [
-        ("verify", verify)
+        ("verify", verify) ,
+        ("solve", solve)
     ]
 
 run :: [String] -> IO ()
