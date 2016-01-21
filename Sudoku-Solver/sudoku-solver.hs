@@ -46,8 +46,7 @@ verify _ = verify []
 solve :: [String] -> IO ()
 solve [filename] = do
     (board, m, n) <- board_from_file filename
-    let solved_board = solve_board board m n
-    print_board solved_board m n
+    attempt_solution_and_print_board board m n
 solve [] = print_error "Accepts one argument: the name of the file to read."
 solve _ = solve []
 
@@ -480,15 +479,24 @@ solve_board_step board m n
 
 -- solve_board
 --
--- Computes a solution for a sudoku board.
-solve_board :: Board -> Int -> Int -> Board
+-- Attempts to compute a solution for a sudoku board. If a solution can not be
+-- found, the incomplete board is returned along with a False. If the solution
+-- is found, the completed board is returned with a True.
+solve_board :: Board -> Int -> Int -> (Bool, Board)
 solve_board board m n
-    | board_solved
-        = if board_is_correct board m n
-            then board
-            else error "Found bad solution."
-    | board == new_board = error "Could not solve board."
+    | board_solved       = (True, board)
+    | board == new_board = (False, board)
     | otherwise          = solve_board new_board m n
     where
         board_solved = null $ filter (== True) $ map isNothing board
         new_board    = solve_board_step board m n
+
+attempt_solution_and_print_board :: Board -> Int -> Int -> IO ()
+attempt_solution_and_print_board board m n
+    | solved = print_board solution m n
+    | otherwise = do
+        putStrLn "Could not compute solution."
+        putStrLn ""
+        print_board solution m n
+    where
+        (solved, solution) = solve_board board m n
