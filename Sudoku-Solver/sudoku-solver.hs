@@ -3,7 +3,6 @@
 --
 {-
 TODO:
-  * finish implementing is_valid_sudoku_board
   * add command line arguments
     * 'verify' - determines whether a completed board is valid
     * 'solve' - solve a given board
@@ -20,9 +19,7 @@ import System.Exit
 import System.IO
 
 type Value = Int
-
 type Board = [Maybe Value]
-type SolvedBoard = [Value]
 
 {---------------
 
@@ -49,8 +46,8 @@ verify _ = verify []
 solve :: [String] -> IO ()
 solve [filename] = do
     (board, m, n) <- board_from_file filename
-    let indexed_board = zip [0..] board
-    putStrLn "Solving"
+    let solved_board = solve_board board m n
+    print_board solved_board m n
 solve [] = print_error "Accepts one argument: the name of the file to read."
 solve _ = solve []
 
@@ -486,7 +483,10 @@ solve_board_step board m n
 -- Computes a solution for a sudoku board.
 solve_board :: Board -> Int -> Int -> Board
 solve_board board m n
-    | board_solved       = board
+    | board_solved
+        = if board_is_correct board m n
+            then board
+            else error "Found bad solution."
     | board == new_board = error "Could not solve board."
     | otherwise          = solve_board new_board m n
     where
