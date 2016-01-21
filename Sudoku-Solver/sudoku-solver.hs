@@ -146,6 +146,12 @@ value_from_maybe n = fromJust n
 
 ---------------}
 
+row_indices_for_index :: Int -> Int -> Int -> [Int]
+row_indices_for_index m n index = [begin..end]
+    where
+        begin = index - (mod index (m * n))
+        end   = begin + (m * n) - 1
+
 -- row_for_index
 --
 -- Pulls out a complete horizontal row from a board for a given index.
@@ -165,6 +171,10 @@ rows_from_board board m n = map (row_for_index board m n) [x * dimension | x <- 
     MAINPULATE COLUMNS
 
 ---------------}
+
+col_indices_for_index :: Int -> Int -> Int -> [Int]
+col_indices_for_index m n index = take (m * n) [begin, begin + (m * n) ..]
+    where begin = mod index (m * n)
 
 -- col_for_index
 --
@@ -270,15 +280,167 @@ group_is_correct group = and [
 
 ---------------}
 
+-- replace_nth
+--
+-- Replaces the nth value in a list.
+replace_nth :: Int -> a -> [a] -> [a]
+replace_nth n value (x:xs)
+    | n == 0 = value:xs
+    | otherwise = x:replace_nth (n - 1) value xs
+
+-- replace_pair
+--
+-- Replaces a value on a board.
+replace_pair :: Board -> (Int, Maybe Value) -> Board
+replace_pair board (index, value) = replace_nth index value board
+
+-- solidiify_values
+--
+-- Given a list of values, determines whether there is only one value in the
+-- list and converts it to a 'Maybe Value'.
+solidify_values :: [Value] -> Maybe Value
+solidify_values values
+    | length values == 1 = Just (values !! 0)
+    | otherwise = Nothing
+
+-- board_from_possibilities
+--
+-- Takes a list of lists of values and converts to a board.
+board_from_possibilities :: [[Value]] -> Board
+board_from_possibilities possibilities = map solidify_values possibilities
+
+---------
+-- Finding Peer Possibilities
+---------
+
+-- possibilities_for_row_from_index
+--
+-- Finds all the possible values for the peers of an index within a row.
+possibilities_for_row_from_index :: Board -> Int -> Int -> Int -> [[Value]]
+possibilities_for_row_from_index board m n index
+    = map snd $ delete (index, index_possibilities) indexed_row_possibilities
+    where
+        indexed_row_possibilities = zip (row_indices_for_index m n index) row_possibilities
+        row_possibilities   = map (possibilities_for_index board m n) (row_indices_for_index m n index)
+        index_possibilities = possibilities_for_index board m n index
+
+-- possibilities_for_col_from_index
+--
+-- Finds all the possible values for the peers of an index within a column.
+possibilities_for_col_from_index :: Board -> Int -> Int -> Int -> [[Value]]
+possibilities_for_col_from_index board m n index
+    = map snd $ delete (index, index_possibilities) indexed_col_possibilities
+    where
+        indexed_col_possibilities = zip (col_indices_for_index m n index) col_possibilities
+        col_possibilities   = map (possibilities_for_index board m n) (col_indices_for_index m n index)
+        index_possibilities = possibilities_for_index board m n index
+
+-- possibilities_for_group_from_index
+--
+-- Finds all the possible values for the peers of an index within a group.
+possibilities_for_group_from_index :: Board -> Int -> Int -> Int -> [[Value]]
+possibilities_for_group_from_index board m n index
+    = map snd $ delete (index, index_possibilities) indexed_group_possibilities
+    where
+        indexed_group_possibilities = zip (group_indices_for_index m n index) group_possibilities
+        group_possibilities = map (possibilities_for_index board m n) (group_indices_for_index m n index)
+        index_possibilities = possibilities_for_index board m n index
+
+--------
+-- Obtaining A Unique Possibility From Peers
+--------
+
+-- unique_possibility_from_row
+--
+-- Looks at an index's peers along a row and determines whether a unique
+-- solution can be found based only on those values.
+unique_possibility_from_row :: Board -> Int -> Int -> Int -> Maybe Value
+unique_possibility_from_row board m n index
+    | length filtered_possibilities == 1 = Just $ fst (filtered_possibilities !! 0)
+    | otherwise = Nothing
+    where
+        filtered_possibilities = filter ((== True) . snd)
+            $ zip index_possibilities
+            $ map null
+            $ map (filtered_possibility row_possibilities) index_possibilities
+        row_possibilities   = possibilities_for_row_from_index board m n index
+        index_possibilities = possibilities_for_index board m n index
+
+-- unique_possibility_from_col
+--
+-- Looks at an index's peers along a column and determines whether a unique
+-- solution can be found based only on those values.
+unique_possibility_from_col :: Board -> Int -> Int -> Int -> Maybe Value
+unique_possibility_from_col board m n index
+    | length filtered_possibilities == 1 = Just $ fst (filtered_possibilities !! 0)
+    | otherwise = Nothing
+    where
+        filtered_possibilities = filter ((== True) . snd)
+            $ zip index_possibilities
+            $ map null
+            $ map (filtered_possibility col_possibilities) index_possibilities
+        col_possibilities   = possibilities_for_col_from_index board m n index
+        index_possibilities = possibilities_for_index board m n index
+
+-- unique_possibility_from_group
+--
+-- Looks at an index's peers within a group and determines whether a unique
+-- solution can be found based only on those values.
+unique_possibility_from_group :: Board -> Int -> Int -> Int -> Maybe Value
+unique_possibility_from_group board m n index
+    | length filtered_possibilities == 1 = Just $ fst (filtered_possibilities !! 0)
+    | otherwise = Nothing
+    where
+        filtered_possibilities = filter ((== True) . snd)
+            $ zip index_possibilities
+            $ map null
+            $ map (filtered_possibility group_possibilities) index_possibilities
+        group_possibilities = possibilities_for_group_from_index board m n index
+        index_possibilities = possibilities_for_index board m n index
+
+--------
+-- Finding An Index's Unique Possibility
+--------
+
+-- unique_possibility_for_index
+--
+-- If there is only one possible value for the given index, it is returned.
+-- Otherwise, a Nothing is returned.
+unique_possibility_for_index :: Board -> Int -> Int -> Int -> Maybe Value
+unique_possibility_for_index board m n index
+    | (not . null) possibilities = possibilities !! 0
+    | otherwise = Nothing
+    where
+        possibilities = filter (not . isNothing)
+            $ [unique_row_possibility] ++ [unique_col_possibility] ++ [unique_group_possibility]
+        unique_row_possibility   = unique_possibility_from_row board m n index
+        unique_col_possibility   = unique_possibility_from_col board m n index
+        unique_group_possibility = unique_possibility_from_group board m n index
+
+-- possibilities_for_index
+--
+-- Returns all possible values for a given index. This is concluded purely by
+-- ruling out values from peers (e.g. this square can't be 3 because there is
+-- already a 3 in the same row).
 possibilities_for_index :: Board -> Int -> Int -> Int -> [Value]
 possibilities_for_index board m n index
     = case (board !! index) of
-        Nothing -> filtered_possibilities_for_index board m n index
+        Nothing    -> filtered_possibilities_for_index board m n index
         Just value -> [value]
+
+-- filtered_possibility
+--
+-- Given a list of lists containing possible values for peers and a possible
+-- value for the current square, returns a list of peers' values if they also
+-- have that value.
+filtered_possibility :: [[Value]] -> Value -> [[Value]]
+filtered_possibility group_possibilities match
+    = filter (elem match) group_possibilities
 
 -- filtered_possibilities_for_index
 --
--- Finds all possible legal values for a given index.
+-- Finds all possible legal values for a given index, based on already-selected
+-- values on the board.
 filtered_possibilities_for_index :: Board -> Int -> Int -> Int -> [Value]
 filtered_possibilities_for_index board m n index = possibilities
     where
@@ -289,6 +451,14 @@ filtered_possibilities_for_index board m n index = possibilities
         col           = col_for_index board m n index
         group         = group_for_index board m n index
 
+-- filter_possibilities
+--
+-- Used to remove already-selected values from a list of possibilities. That is,
+-- it will return [1, 2, 5, 9] from the following zone (for example):
+--   _ 4 6
+--   3 7 _
+--   _ _ 8
+--
 -- possibilities: list of possible remaining integer answers
 -- values: list of possible values from the board
 filter_possibilities :: [Int] -> [Maybe Value] -> [Value]
@@ -296,5 +466,29 @@ filter_possibilities [] _ = []
 filter_possibilities possibilities [] = possibilities
 filter_possibilities possibilities values
     = case head values of
-        Nothing -> filter_possibilities possibilities (tail values)
+        Nothing    -> filter_possibilities possibilities (tail values)
         Just value -> filter_possibilities (delete value possibilities) (tail values)
+
+--------
+-- Solving the Board
+--------
+
+-- solve_board_step
+--
+-- Searches the entire board for blank squares to which there is only one
+-- possible solution and returns a board with those solutions filled in.
+solve_board_step :: Board -> Int -> Int -> Board
+solve_board_step board m n
+    = map (unique_possibility_for_index board m n) [0..(m * n) * (m * n) - 1]
+
+-- solve_board
+--
+-- Computes a solution for a sudoku board.
+solve_board :: Board -> Int -> Int -> Board
+solve_board board m n
+    | board_solved       = board
+    | board == new_board = error "Could not solve board."
+    | otherwise          = solve_board new_board m n
+    where
+        board_solved = null $ filter (== True) $ map isNothing board
+        new_board    = solve_board_step board m n
