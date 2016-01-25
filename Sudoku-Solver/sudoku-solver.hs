@@ -152,8 +152,7 @@ row_indices_for_index m n index = [begin..end]
 --
 -- Pulls out a complete horizontal row from a board for a given index.
 row_for_index :: Board -> Int -> Int -> Int -> [Maybe Value]
-row_for_index board m n index = take dimension $ drop (index - (mod index dimension)) board
-    where dimension = m * n
+row_for_index board m n index = map (board !!) $ row_indices_for_index m n index
 
 -- rows_from_board
 --
@@ -176,8 +175,7 @@ col_indices_for_index m n index = take (m * n) [begin, begin + (m * n) ..]
 --
 -- Pulls out a complete vertical column from a board for a given index.
 col_for_index :: Board -> Int -> Int -> Int -> [Maybe Value]
-col_for_index board m n index = map (board !!) [index, (index + dimension) .. ((dimension * dimension) - 1)]
-    where dimension = m * n
+col_for_index board m n index = map (board !!) $ col_indices_for_index m n index
 
 -- cols_from_board
 --
