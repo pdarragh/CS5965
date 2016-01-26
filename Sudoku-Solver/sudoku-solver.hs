@@ -36,7 +36,14 @@ data Guess = Guess {
 ---------------}
 
 show_usage_message :: IO ()
-show_usage_message = putStrLn "Usage information."
+show_usage_message = do
+    progName <- getProgName
+    let lines = [
+            "Sudoku Solver",
+            "Usage:  " ++ progName ++ " {solve | verify } puzzle-file",
+            "        " ++ progName ++ " {generate} m n"
+            ]
+    putStrLn $ intercalate "\n" lines
 
 verify :: [String] -> IO ()
 verify [filename] = do
