@@ -65,6 +65,38 @@ solve [filename] = do
 solve [] = print_error "Accepts one argument: the name of the file to read."
 solve _ = solve []
 
+generate :: [String] -> IO ()
+generate [m, n] = generate [m, n, "17"]
+generate [m_str, n_str, holes_str] = do
+    let
+        m       = read m_str :: Int
+        n       = read n_str :: Int
+        holes   = read holes_str :: Int
+    (incomplete, solution) <- generate_complete_board_pair m n holes
+    putStrLn "Generated board:"
+    print_board incomplete m n
+    putStrLn ""
+    putStrLn "With solution:"
+    print_board solution m n
+
+dispatch :: [(String, [String] -> IO ())]
+dispatch
+    = [
+        ("verify", verify)  ,
+        ("solve", solve)    ,
+        ("generate", generate)
+    ]
+
+run :: [String] -> IO ()
+run [] = show_usage_message
+run (command : args)
+    = case lookup command dispatch of
+        Just act -> act args
+        Nothing  -> show_usage_message
+
+main :: IO ()
+main = run =<< getArgs
+
 board_from_file :: String -> IO (Board, Int, Int)
 board_from_file filename = do
     file_exists <- doesFileExist filename
@@ -77,23 +109,6 @@ board_from_file filename = do
         let board = build_board_from_lines $ tail $ filtered_contents
         return (board, m, n)
     else error "Invalid filename."
-
-dispatch :: [(String, [String] -> IO ())]
-dispatch
-    = [
-        ("verify", verify) ,
-        ("solve", solve)
-    ]
-
-run :: [String] -> IO ()
-run [] = show_usage_message
-run (command : args)
-    = case lookup command dispatch of
-        Just act -> act args
-        Nothing  -> show_usage_message
-
-main :: IO ()
-main = run =<< getArgs
 
 {---------------
 
@@ -314,6 +329,35 @@ incomplete_board_is_correct board m n = and [
         all id $ map (`incomplete_group_is_correct` (m * n)) $ cols_from_board board m n ,
         all id $ map (`incomplete_group_is_correct` (m * n)) $ groups_from_board board m n
     ]
+
+{---------------
+
+    GENERATE
+
+---------------}
+
+-- generate_complete_board_pair
+--
+-- Given the dimensions and number of holes to produce, returns a pair of boards
+-- where the second board is a solution to the incomplete first board. The
+-- boards are generated randomly.
+generate_complete_board_pair :: Int -> Int -> Int -> IO (Board, Board)
+generate_complete_board_pair m n holes = do
+    (_, solution) <- solve_board_with_backtracking (replicate size Nothing) m n []
+    incomplete    <- make_holes_in_board solution holes
+    return (incomplete, solution)
+    where size = (m * n) * (m * n)
+
+-- make_holes_in_board
+--
+-- Puts holes in a board by simply removing random values.
+make_holes_in_board :: Board -> Int -> IO Board
+make_holes_in_board board 0 = return board
+make_holes_in_board board holes = do
+    random_gen <- newStdGen
+    let (index, _) = randomR (0, (length board) - 1) random_gen
+    make_holes_in_board (replace_pair board (index, Nothing)) (holes - 1)
+
 
 {---------------
 
