@@ -516,10 +516,12 @@ attempt_solution_and_print_board board m n = do
     (solved, solution) <- solve_board_with_backtracking board m n []
     if solved
         then print_board solution m n
-        else do
-            putStrLn "Could not compute solution."
-            putStrLn ""
-            print_board solution m n
+        else if (null solution)
+            then attempt_solution_and_print_board board m n
+            else do
+                putStrLn "Could not compute solution."
+                putStrLn ""
+                print_board solution m n
 
 -- solve_board_step
 --
@@ -561,9 +563,9 @@ guess_from_values values = do
 -- the necessary values to track that change
 -- returns: (Int, Value, [Value], Board)
 -- meaning: (index, chosen value, non-chosen values, new board)
-make_guess_for_board :: Board -> Int -> Int -> IO Guess
+make_guess_for_board :: Board -> Int -> Int -> IO (Guess, Board)
 make_guess_for_board board m n
-    | null empty_indices = error "no blank spots to guess"
+    | null empty_indices = error "No blank spots to guess."
     | otherwise = do
         random_gen <- newStdGen
         let
@@ -573,18 +575,18 @@ make_guess_for_board board m n
         if (null possibilities)
             then make_guess_for_board board m n
             else do
-                --putStrLn "make_guess_for_board"
                 value <- guess_from_values possibilities
                 let new_board = replace_pair board (index, Just value)
-                return Guess {
+                let guess = Guess {
                     guessIndex      = index,
                     guessValue      = value,
                     guessOptions    = (delete value possibilities),
                     guessBoard      = board
                 }
+                return (guess, new_board)
     where 
-        empty_indices   = map fst $ filter (isNothing . snd)
-                            $ zip [0..(m*n) * (m*n) - 1] board
+        empty_indices = map fst $ filter (isNothing . snd)
+                        $ zip [0..(m*n) * (m*n) - 1] board
 
 -- board_can_be_guessed
 --
@@ -604,9 +606,17 @@ board_can_be_guessed board m n
 -- Takes a board with blank spaces and makes a guess, returning the guess and
 -- the new board state.
 guess_on_board :: Board -> Int -> Int -> IO (Guess, Board)
-guess_on_board board m n = do
-    guess <- make_guess_for_board board m n
-    return (guess, replace_pair board (guessIndex guess, Just (guessValue guess)))
+guess_on_board board m n
+    | board_can_be_guessed board m n
+        = make_guess_for_board board m n
+    | otherwise = do
+        let guess = Guess {
+            guessIndex      = 0,
+            guessValue      = 0,
+            guessOptions    = [],
+            guessBoard      = []
+        }
+        return (guess, board)
 
 -- backtrack_board
 --
@@ -620,8 +630,12 @@ backtrack_board board m n []
     -- No guesses have been made... so make a new one.
     | board_can_be_guessed board m n = do
         (guess, new_board) <- guess_on_board board m n
-        return ([guess], new_board)
-    | otherwise = error "Can not make a guess and no guesses to backtrack."
+        if (guessIndex guess == 0)
+            then backtrack_board board m n []   -- A bad guess was made.
+            else return ([guess], new_board)    -- Made a good guess. Continue!
+    | otherwise
+        -- Something's gone wrong.
+        = return ([], [])
 backtrack_board board m n (guess:old_guesses)
     -- There are some previous guesses, so try to backtrack.
     | null $ guessOptions guess
@@ -661,7 +675,9 @@ solve_board_with_backtracking board m n guesses
             then do
                 -- Need to take a guess (no progress via iteration).
                 (guess, guess_board) <- guess_on_board board m n
-                solve_board_with_backtracking guess_board m n (guess:guesses)
+                if (guessIndex guess == 0)
+                    then backtrack
+                    else solve_board_with_backtracking guess_board m n (guess:guesses)
             else do
                 -- Use the board with more squares and continue.
                 solve_board_with_backtracking next_board m n guesses
@@ -672,4 +688,10 @@ solve_board_with_backtracking board m n guesses
         (next_board_complete, next_board) = solve_board board m n
         backtrack = do
             (backtracked_guesses, backtracked_board) <- backtrack_board board m n guesses
-            solve_board_with_backtracking backtracked_board m n backtracked_guesses
+            if (null backtracked_guesses && null backtracked_board)
+                then
+                    -- Something went wrong. Signal upwards to start from the beginning.
+                    return (False, [])
+                else
+                    -- Proceed with the backtracked board.
+                    solve_board_with_backtracking backtracked_board m n backtracked_guesses
