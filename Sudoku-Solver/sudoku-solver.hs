@@ -9,6 +9,15 @@ TODO:
     * 'generate' - create a new board
 -}
 
+module Sudoku (
+    Value,
+    Board,
+    solve_board,
+    print_board,
+    print_value,
+    generate_complete_board_pair,
+) where
+
 import Control.Monad
 import Data.List
 import Data.List.Split
@@ -29,11 +38,11 @@ data Guess = Guess {
     guessBoard      :: Board
 } deriving (Show)
 
-{---------------
+{-------------------------------------------------------------------------------
 
     MAIN
 
----------------}
+-------------------------------------------------------------------------------}
 
 show_usage_message :: IO ()
 show_usage_message = do
@@ -110,11 +119,11 @@ board_from_file filename = do
         return (board, m, n)
     else error "Invalid filename."
 
-{---------------
+{-------------------------------------------------------------------------------
 
     PRINT
 
----------------}
+-------------------------------------------------------------------------------}
 
 -- print_error
 --
@@ -140,11 +149,11 @@ print_row row = intercalate " " $ map print_value row
 print_board :: Board -> Int -> Int -> IO ()
 print_board board m n = putStrLn $ intercalate "\n" $ map print_row $ rows_from_board board m n
 
-{---------------
+{-------------------------------------------------------------------------------
 
     READ
 
----------------}
+-------------------------------------------------------------------------------}
 
 read_int :: String -> Maybe Value
 read_int "_" = Nothing
@@ -156,21 +165,19 @@ read_int s = Just $ (read :: String -> Int) s
 build_board_from_lines :: [String] -> Board
 build_board_from_lines lines = map read_int $ words $ intercalate " " lines
 
-{---------------
+{-------------------------------------------------------------------------------
 
     MAINPULATE
 
----------------}
+-------------------------------------------------------------------------------}
 
 value_from_maybe :: Maybe Value -> Value
 value_from_maybe Nothing = 0
 value_from_maybe n = fromJust n
 
-{---------------
-
-    MAINPULATE ROWS
-
----------------}
+--------------------------------------------------------------------------------
+-- Manipulate Rows
+--------------------------------------------------------------------------------
 
 row_indices_for_index :: Int -> Int -> Int -> [Int]
 row_indices_for_index m n index = [begin..end]
@@ -191,11 +198,9 @@ rows_from_board :: Board -> Int -> Int -> [[Maybe Value]]
 rows_from_board board m n = map (row_for_index board m n) [x * dimension | x <- [0..(dimension - 1)]]
     where dimension = m * n
 
-{---------------
-
-    MAINPULATE COLUMNS
-
----------------}
+--------------------------------------------------------------------------------
+-- Manipulate Columns
+--------------------------------------------------------------------------------
 
 col_indices_for_index :: Int -> Int -> Int -> [Int]
 col_indices_for_index m n index = take (m * n) [begin, begin + (m * n) ..]
@@ -213,11 +218,9 @@ col_for_index board m n index = map (board !!) $ col_indices_for_index m n index
 cols_from_board :: Board -> Int -> Int -> [[Maybe Value]]
 cols_from_board board m n = map (col_for_index board m n) [0..(m * n - 1)]
 
-{---------------
-
-    MAINPULATE GROUPS
-
----------------}
+--------------------------------------------------------------------------------
+-- Manipulate Groups
+--------------------------------------------------------------------------------
 
 -- first_indices_for_groups_in_col
 --
@@ -271,11 +274,11 @@ group_for_index board m n index = map (board !!) $ group_indices_for_index m n i
 groups_from_board :: Board -> Int -> Int -> [[Maybe Value]]
 groups_from_board board m n = map (group_for_first_index board m n) $ first_indices_for_groups m n
 
-{---------------
+{-------------------------------------------------------------------------------
 
     VERIFY
 
----------------}
+-------------------------------------------------------------------------------}
 
 -- board_is_correct
 --
@@ -330,11 +333,11 @@ incomplete_board_is_correct board m n = and [
         all id $ map (`incomplete_group_is_correct` (m * n)) $ groups_from_board board m n
     ]
 
-{---------------
+{-------------------------------------------------------------------------------
 
     GENERATE
 
----------------}
+-------------------------------------------------------------------------------}
 
 -- generate_complete_board_pair
 --
@@ -358,12 +361,18 @@ make_holes_in_board board holes = do
     let (index, _) = randomR (0, (length board) - 1) random_gen
     make_holes_in_board (replace_pair board (index, Nothing)) (holes - 1)
 
-
-{---------------
+{-------------------------------------------------------------------------------
 
     SOLVE
 
----------------}
+-------------------------------------------------------------------------------}
+
+-- solve_board
+--
+-- Takes a board and its dimensions and solves the board (if it's solvable).
+-- This is actually just a wrapper for solve_board_with_backtracking.
+solve_board :: Board -> Int -> Int -> IO (Bool, Board)
+solve_board board m n = solve_board_with_backtracking board m n []
 
 -- replace_nth
 --
@@ -394,9 +403,9 @@ solidify_values values
 board_from_possibilities :: [[Value]] -> Board
 board_from_possibilities possibilities = map solidify_values possibilities
 
----------
+--------------------------------------------------------------------------------
 -- Finding Peer Possibilities
----------
+--------------------------------------------------------------------------------
 
 -- possibilities_for_row_from_index
 --
@@ -431,9 +440,9 @@ possibilities_for_group_from_index board m n index
         group_possibilities = map (possibilities_for_index board m n) (group_indices_for_index m n index)
         index_possibilities = possibilities_for_index board m n index
 
---------
+--------------------------------------------------------------------------------
 -- Obtaining A Unique Possibility From Peers
---------
+--------------------------------------------------------------------------------
 
 -- unique_possibility_from_row
 --
@@ -483,9 +492,9 @@ unique_possibility_from_group board m n index
         group_possibilities = possibilities_for_group_from_index board m n index
         index_possibilities = possibilities_for_index board m n index
 
---------
+--------------------------------------------------------------------------------
 -- Finding An Index's Unique Possibility
---------
+--------------------------------------------------------------------------------
 
 -- unique_possibility_for_index
 --
@@ -554,9 +563,9 @@ filter_possibilities possibilities values
         Nothing    -> filter_possibilities possibilities (tail values)
         Just value -> filter_possibilities (delete value possibilities) (tail values)
 
---------
+--------------------------------------------------------------------------------
 -- Solving the Board
---------
+--------------------------------------------------------------------------------
 
 -- attempt_solution_and_print_board
 --
@@ -564,7 +573,7 @@ filter_possibilities possibilities values
 -- the result.
 attempt_solution_and_print_board :: Board -> Int -> Int -> IO ()
 attempt_solution_and_print_board board m n = do
-    (solved, solution) <- solve_board_with_backtracking board m n []
+    (solved, solution) <- solve_board board m n
     if solved
         then print_board solution m n
         else if (null solution)
@@ -582,16 +591,16 @@ solve_board_step :: Board -> Int -> Int -> Board
 solve_board_step board m n
     = map (unique_possibility_for_index board m n) [0..(m * n) * (m * n) - 1]
 
--- solve_board
+-- solve_board_without_guessing
 --
 -- Attempts to compute a solution for a sudoku board. If a solution can not be
 -- found, the incomplete board is returned along with a False. If the solution
 -- is found, the completed board is returned with a True.
-solve_board :: Board -> Int -> Int -> (Bool, Board)
-solve_board board m n
+solve_board_without_guessing :: Board -> Int -> Int -> (Bool, Board)
+solve_board_without_guessing board m n
     | board_solved       = (True, board)    -- board is filled out
     | board == new_board = (False, board)   -- board is not filled but cannot proceed
-    | otherwise          = solve_board new_board m n    -- recur!
+    | otherwise          = solve_board_without_guessing new_board m n    -- recur!
     where
         board_solved = null $ filter isNothing board
         new_board    = solve_board_step board m n
@@ -736,7 +745,7 @@ solve_board_with_backtracking board m n guesses
         -- The board is not filled nor is it correct... so let's rewind.
         = backtrack
     where
-        (next_board_complete, next_board) = solve_board board m n
+        (next_board_complete, next_board) = solve_board_without_guessing board m n
         backtrack = do
             (backtracked_guesses, backtracked_board) <- backtrack_board board m n guesses
             if (null backtracked_guesses && null backtracked_board)
